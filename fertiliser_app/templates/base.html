@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <a class="brand" href="{{ url_for('stock') }}">{{ site_name }}</a>
+  <nav>
+    <a href="{{ url_for('stock') }}" class="{{ 'on' if request.endpoint == 'stock' }}">Stock</a>
+    <a href="{{ url_for('use') }}" class="{{ 'on' if request.endpoint == 'use' }}">Use bags</a>
+    <a href="{{ url_for('log') }}" class="{{ 'on' if request.endpoint == 'log' }}">Log</a>
+    {% if is_admin %}
+      <a href="{{ url_for('deliver') }}" class="{{ 'on' if request.endpoint == 'deliver' }}">Delivery</a>
+      <a href="{{ url_for('adjust') }}" class="{{ 'on' if request.endpoint == 'adjust' }}">Stock count</a>
+      <a href="{{ url_for('fertilisers') }}" class="{{ 'on' if request.endpoint in ('fertilisers', 'edit_fertiliser') }}">Fertilisers</a>
+      <a href="{{ url_for('reports_page') }}" class="{{ 'on' if request.endpoint == 'reports_page' }}">Reports</a>
+    {% endif %}
+    {% if pin_enabled %}
+      {% if is_admin %}
+        <form method="post" action="{{ url_for('logout') }}" class="inline"><button class="link">Manager off</button></form>
+      {% else %}
+        <a href="{{ url_for('login') }}">Manager</a>
+      {% endif %}
+    {% endif %}
+  </nav>
+</header>
+<main>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

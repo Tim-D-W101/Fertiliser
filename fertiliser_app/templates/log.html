@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Log - {{ site_name }}{% endblock %}
+{% block content %}
+<h1>Stock log</h1>
+<form method="get" class="filters">
+  <label>From <input type="date" name="start" value="{{ f.start }}"></label>
+  <label>To <input type="date" name="end" value="{{ f.end }}"></label>
+  <label>Fertiliser
+    <select name="fertiliser_id"><option value="">All</option>
+      {% for x in ferts %}<option value="{{ x.id }}" {{ 'selected' if f.fertiliser_id == x.id }}>{{ x.name }}</option>{% endfor %}
+    </select></label>
+  <label>Type
+    <select name="kind"><option value="">All</option>
+      {% for k, label in kind_labels.items() %}<option value="{{ k }}" {{ 'selected' if f.kind == k }}>{{ label }}</option>{% endfor %}
+    </select></label>
+  <button class="btn">Show</button>
+  <a class="btn alt" href="{{ url_for('log_xlsx', **request.args) }}">Download Excel</a>
+</form>
+{% if not rows %}<p class="empty">Nothing recorded for these dates.</p>{% else %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Date / time</th><th>Fertiliser</th><th>Type</th><th class="num">Bags</th><th class="num">Kg</th>{% if is_admin %}<th class="num">Value</th>{% endif %}<th>By</th><th>Note</th>{% if is_admin %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for m in rows %}
+  <tr class="{{ 'void' if m.voided_at }} kind-{{ m.kind }}">
+    <td>{{ m.created_at }}</td>
+    <td>{{ m.fertiliser_name }}</td>
+    <td>{{ kind_labels[m.kind] }}</td>
+    <td class="num">{{ '+' if m.bags > 0 }}{{ m.bags|qty }}</td>
+    <td class="num">{{ (m.bags * m.kg_per_bag)|qty }}</td>
+    {% if is_admin %}<td class="num">{{ (m.bags * m.cost_per_bag)|money }}</td>{% endif %}
+    <td>{{ m.recorded_by }}</td>
+    <td>{{ m.note }}{% if m.voided_at %}<br><small>Cancelled {{ m.voided_at }} by {{ m.voided_by }}: {{ m.void_reason }}</small>{% endif %}</td>
+    {% if is_admin %}<td>{% if not m.voided_at %}
+      <details><summary>Cancel</summary>
+        <form method="post" action="{{ url_for('void', mid=m.id) }}" class="void-form">
+          <input name="reason" required placeholder="Reason">
+          <input type="hidden" name="back" value="{{ request.full_path }}">
+          <button class="btn danger">Cancel entry</button>
+        </form>
+      </details>{% endif %}</td>{% endif %}
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
+{% endblock %}

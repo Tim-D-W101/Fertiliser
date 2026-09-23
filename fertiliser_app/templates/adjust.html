@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Stock count - {{ site_name }}{% endblock %}
+{% block content %}
+<h1>Update stock on hand</h1>
+<p class="hint">Enter the number of bags actually in the store. The difference is saved in the log as a stock adjustment with your reason.</p>
+{% if not ferts %}
+  <p class="empty"><a href="{{ url_for('fertilisers') }}">Add a fertiliser</a> first.</p>
+{% else %}
+<form method="post" class="stack">
+  {% include "_pick.html" %}
+  <label>Bags counted in store
+    <input type="number" name="counted" min="0" step="0.25" inputmode="decimal" required value="{{ form.get('counted', '') }}">
+  </label>
+  <label>Reason
+    <input name="note" required value="{{ form.get('note', '') }}" placeholder="e.g. month-end count, torn bag, opening stock">
+  </label>
+  {% include "_name.html" %}
+  <button class="btn big">Save stock count</button>
+</form>
+{% endif %}
+{% endblock %}
