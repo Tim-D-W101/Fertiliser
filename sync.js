@@ -4,7 +4,7 @@
  * Every device shares the company code. That code is the only secret: the
  * database exposes no tables, just three functions that check the code
  * first, so the publishable key below is safe to ship in the page. It is the
- * same Supabase project and the same company code as Tikita.
+ * same Supabase project as Tikita, but fertiliser has its own company code.
  *
  * Offline-first. Every change is written to this device first and remembered
  * in a "pending" list; a sync pushes that list, then pulls whatever other

@@ -1,0 +1,36 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    # claude/eloquent-lovelace-3ks3fl is this repository's default branch.
+    # main is listed too so publishing keeps working if the default moves.
+    branches: [claude/eloquent-lovelace-3ks3fl, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pages must already be switched on for the repository
+      # (Settings -> Pages -> Source: GitHub Actions). The workflow token
+      # is not allowed to switch it on itself, so this step fails until
+      # that is done once, by hand.
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

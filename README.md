@@ -6,8 +6,9 @@ and what is left.
 
 It is built the same way as **Tikita**. It installs to the home screen of a
 tablet, phone or PC, works with no signal, and shares one set of records
-between every device that has the company code. It uses **the same company
-code as Tikita**.
+between every device that has the company code.
+
+**Address:** <https://tim-d-w101.github.io/Fertiliser/>
 
 ---
 
@@ -67,8 +68,12 @@ price change later does not alter an earlier month.
 
 ## Several devices
 
-Tap the status chip in the top bar and enter the company code (the same code
-as Tikita). Every device with the code shares the same fertiliser list, stock
+Tap the status chip in the top bar and enter the fertiliser company code.
+It is a different code from Tikita's: the Tikita code does not open the
+fertiliser records, and this code does not open Tikita. Ask whoever set the
+app up for it; it is deliberately not stored in this repository. Anyone
+holding it can read and change the stock records, so treat it like a key.
+Every device with the code shares the same fertiliser list, stock
 and log. The chip shows where things stand: *This device only*, *Synced*,
 *3 waiting*, *Syncing…* or *Not synced*.
 
@@ -81,13 +86,30 @@ Until a device is connected, its records exist only on that device. Use
 
 ## Hosting it
 
-Like Tikita, the app is plain HTML, CSS and JavaScript with no build step.
-Publish the files as they are, over `https://`, on any static host.
-Installing to the home screen and working offline both need `https://`.
+Like Tikita, the app is plain HTML, CSS and JavaScript with no build step,
+published by GitHub Pages. The workflow in `.github/workflows/pages.yml`
+publishes it on every push, to <https://tim-d-w101.github.io/Fertiliser/>.
 
-Once it is published, open the address on the tablet once with signal, then
-**Add to Home screen** (Chrome: ⋮ menu; iPad: Share button). On the PC, open
-it in Edge and use **… → Apps → Install this site as an app**.
+Pages has to be switched on once by hand, because a workflow is not allowed
+to switch it on for itself: *Settings → Pages → Build and deployment →
+Source:* **GitHub Actions**. Then re-run the latest workflow from the
+**Actions** tab. Until that is done, the workflow fails at "Create Pages
+site"; that is expected and is not a problem with the app.
+
+### Installing it
+
+Open the address on the tablet once, with signal, so the app can save itself
+for offline use.
+
+- **Android / Chrome:** tap **Install** in the top bar, or use the ⋮ menu →
+  *Add to Home screen*.
+- **iPad / iPhone:** in Safari, tap Share → *Add to Home Screen*.
+- **PC:** open the address in Edge, then **… → Apps → Install this site as
+  an app**.
+
+Then tap the status chip and enter the fertiliser company code. A change
+pushed here reaches every device the next time the app is opened, with no
+reinstall. Records are never touched by an update.
 
 To try it locally:
 
@@ -128,9 +150,10 @@ been cancelled. The name and PIN set on a device are kept separately under
 
 ### The shared database
 
-It lives in the same Supabase project as Tikita and reuses Tikita's
-`workspaces` table, so one company code opens both apps. Tikita's own tables
-and functions are untouched. As with Tikita, the tables cannot be reached
+It lives in the same Supabase project as Tikita, with its own company codes
+in `fert_workspaces`. Tikita's tables and functions are untouched. To move to
+a fresh code, change `join_code` in `fert_workspaces` and enter the new code
+on each device. As with Tikita, the tables cannot be reached
 through the API. All access goes through three functions that check the code
 first:
 

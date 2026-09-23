@@ -1,16 +1,26 @@
 -- Fertiliser stock — the shared database.
 --
--- Applied to the same Supabase project as Tikita (tikita-attendance) as the
--- migration "fertiliser_stock". It reuses Tikita's public.workspaces table
--- and public.workspace_for_code(), so one company code opens both apps.
+-- Lives in the same Supabase project as Tikita (tikita-attendance), but with
+-- its own company codes in public.fert_workspaces: a Tikita code does not
+-- open the fertiliser records, and a fertiliser code does not open Tikita.
 -- Tikita's own tables and functions are not touched.
 --
 -- Same pattern as Tikita: row level security on with no policies, so the
 -- tables are unreachable through the API; all access goes through three
 -- SECURITY DEFINER functions that check the company code first.
+--
+-- The code itself is never stored here. To create one:
+--   insert into public.fert_workspaces (name, join_code) values ('Name', 'XXXX-XXXX-XXXX-XXXX');
+
+create table public.fert_workspaces (
+  id         uuid        primary key default gen_random_uuid(),
+  name       text        not null,
+  join_code  text        not null unique,
+  created_at timestamptz not null default now()
+);
 
 create table public.fert_products (
-  workspace_id uuid        not null references public.workspaces(id) on delete cascade,
+  workspace_id uuid        not null references public.fert_workspaces(id) on delete cascade,
   id           text        not null,
   name         text        not null default '',
   kg_per_bag   numeric     not null default 25,
@@ -24,7 +34,7 @@ create table public.fert_products (
 
 -- Stock movements. Append-only: once written, only the void fields change.
 create table public.fert_moves (
-  workspace_id uuid        not null references public.workspaces(id) on delete cascade,
+  workspace_id uuid        not null references public.fert_workspaces(id) on delete cascade,
   id           text        not null,
   product_id   text        not null,
   kind         text        not null check (kind in ('delivery', 'usage', 'adjustment')),
@@ -44,7 +54,7 @@ create table public.fert_moves (
 
 -- Every price a fertiliser has had, so old months are valued at their price.
 create table public.fert_prices (
-  workspace_id uuid        not null references public.workspaces(id) on delete cascade,
+  workspace_id uuid        not null references public.fert_workspaces(id) on delete cascade,
   id           text        not null,
   product_id   text        not null,
   cost_per_bag numeric     not null,
@@ -58,9 +68,27 @@ create index fert_products_changed on public.fert_products (workspace_id, update
 create index fert_moves_changed    on public.fert_moves    (workspace_id, updated_at);
 create index fert_prices_changed   on public.fert_prices   (workspace_id, updated_at);
 
+alter table public.fert_workspaces enable row level security;
 alter table public.fert_products enable row level security;
 alter table public.fert_moves    enable row level security;
 alter table public.fert_prices   enable row level security;
+
+create or replace function public.fert_workspace_for_code(p_code text)
+returns uuid
+language plpgsql security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_id uuid;
+begin
+  select id into v_id from public.fert_workspaces
+   where join_code = upper(trim(coalesce(p_code, '')));
+  if v_id is null then
+    raise exception 'invalid_code' using errcode = '28000';
+  end if;
+  return v_id;
+end;
+$$;
 
 create or replace function public.fert_join(p_code text)
 returns jsonb
@@ -68,10 +96,10 @@ language plpgsql security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_id uuid := public.workspace_for_code(p_code);
+  v_id uuid := public.fert_workspace_for_code(p_code);
   v_name text;
 begin
-  select name into v_name from public.workspaces where id = v_id;
+  select name into v_name from public.fert_workspaces where id = v_id;
   return jsonb_build_object('workspace', v_id, 'name', v_name, 'now', now());
 end;
 $$;
@@ -82,7 +110,7 @@ language plpgsql security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_id uuid := public.workspace_for_code(p_code);
+  v_id uuid := public.fert_workspace_for_code(p_code);
   v_since timestamptz := coalesce(p_since, '-infinity');
 begin
   return jsonb_build_object(
@@ -117,7 +145,7 @@ language plpgsql security definer
 set search_path = public, pg_temp
 as $$
 declare
-  v_id uuid := public.workspace_for_code(p_code);
+  v_id uuid := public.fert_workspace_for_code(p_code);
 begin
   insert into public.fert_products
          (workspace_id, id, name, kg_per_bag, cost_per_bag, reorder, active, deleted, updated_at)
@@ -178,7 +206,8 @@ begin
 end;
 $$;
 
-revoke all on public.fert_products, public.fert_moves, public.fert_prices from anon, authenticated;
+revoke all on public.fert_workspaces, public.fert_products, public.fert_moves, public.fert_prices from anon, authenticated;
+revoke execute on function public.fert_workspace_for_code(text) from public, anon, authenticated;
 grant execute on function public.fert_join(text) to anon, authenticated;
 grant execute on function public.fert_pull(text, timestamptz) to anon, authenticated;
 grant execute on function public.fert_push(text, jsonb) to anon, authenticated;

@@ -1136,7 +1136,7 @@
     if (!st.connected) {
       html += '<form class="card" data-form="connect" autocomplete="off">' +
         '<h3 class="card-title">Connect this ' + DEVICE + '</h3>' +
-        '<p class="card-note">Type the company code — the same code as the Tikita attendance app. Every tablet, ' +
+        '<p class="card-note">Type the fertiliser company code (not the Tikita one). Every tablet, ' +
         'phone and PC with the code shares one set of fertilisers, stock and log.</p>' +
         '<label class="field"><span class="sr-only">Company code</span><input name="code" id="codeInput" ' +
         'placeholder="XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" autocorrect="off" spellcheck="false" ' +
