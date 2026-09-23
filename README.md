@@ -1,87 +1,144 @@
 # Fertiliser Stock
 
-A small web app for tracking fertiliser stock: what comes in, what the mixer
-uses, what is left, and what it cost. It runs on the tower server and
-people use it from a web browser on a tablet, phone or PC. There is nothing to
-install on the tablet.
+Keeps track of fertiliser: deliveries coming in, bags the mixer takes out,
+stock on hand, and a monthly Excel report of what was used, what it cost,
+and what is left.
 
-## What it does
+It is built the same way as **Tikita**. It installs to the home screen of a
+tablet, phone or PC, works with no signal, and shares one set of records
+between every device that has the company code. It uses **the same company
+code as Tikita**.
 
-| Who | Page | What it's for |
-|---|---|---|
-| Everyone | **Stock** | Current bags, kg and value of each fertiliser. Low stock shows orange, below zero shows red |
-| Mixer | **Use bags** | Pick the fertiliser, enter the number of bags, enter your name, then Save. Half bags are allowed |
-| Everyone | **Log** | Every movement with its date and time, filtered by date, fertiliser and type. Has a **Download Excel** button |
-| Manager | **Delivery** | Book in bags received and the cost per bag. This can also update the price |
-| Manager | **Stock count** | Enter the bags counted in the store. The app saves the difference as an adjustment, with a reason |
-| Manager | **Fertilisers** | Add or edit fertilisers (name, kg per bag, cost per bag, re-order level). Shows the price history |
-| Manager | **Reports** | Monthly Excel report with opening stock, received, used (bags, kg and cost), adjustments, closing stock and its value. Also has a database backup download |
+---
 
-Every entry is saved with a timestamp and the name of the person who made
-it. Entries are never deleted. The manager can **cancel** an entry that was
-a mistake: it stays in the log crossed out, with who cancelled it and why,
-and it no longer counts towards stock.
+## Using it day to day
 
-Costs are saved with each entry, so a price change does not alter old
-months. Closing stock is valued at the price in force at the end of the month.
+**Stock** shows each fertiliser in bags and kg. A card turns orange when it
+is down to its re-order level and red if it has gone below zero, which means
+it is time for a stock count. The manager also sees what the stock is worth.
 
-## Setting it up on the tower server (Windows)
+**Use bags** is the mixer's screen. Tap the fertiliser, set the number of
+bags with − / + (half and quarter bags can be typed), check the name and tap
+**Save**. The tablet remembers the name. After saving, an **Undo** button
+stays up for a few seconds in case of a wrong tap. Recording works without
+signal, and the entry keeps the time it was actually made.
 
-1. Install Python 3 from <https://www.python.org/downloads/>. On the first
-   installer screen, tick **"Add python.exe to PATH"**.
-2. Copy this folder onto the server, for example `C:\FertiliserStock`.
-3. Open `start_server.bat` in Notepad and set:
-   - `FERT_ADMIN_PIN`: the manager PIN. The mixer can only see stock, record
-     usage and view the log without it.
-   - `FERT_CURRENCY`: the currency label shown on costs (default `R`).
-4. Double-click `start_server.bat`. The first run installs what it needs,
-   which takes about a minute. The window then shows an address like
-   `http://192.168.1.20:8080`.
-5. On the tablet, open that address in Chrome or Safari. Use **Add to Home
-   screen** so it opens like an app.
+**Log** lists every entry with its date, time and who made it. You can filter
+it by dates, fertiliser and type (Delivery, Used, Stock count), and
+**Export Excel file** downloads what is on screen.
 
-If Windows Firewall asks, allow Python on **private networks**. To start the
-app automatically, put a shortcut to `start_server.bat` in the server's
-Startup folder (press Win+R, type `shell:startup`) or add it to Task
-Scheduler with the trigger "At startup".
+To fix a wrong entry, the manager taps **Cancel** on it and gives a reason.
+The entry stays in the log, crossed out, with who cancelled it and why, and
+it no longer counts towards stock. Entries are never deleted.
 
-All data is stored in one file, `data\fertiliser.db`. Include the `data`
-folder in the server's normal backups. You can also download a copy from
-**Reports → Download a full backup**.
+**Book in a delivery** (from the Stock screen): choose the fertiliser, then
+enter the bags and the cost per bag. The current price is filled in for you.
+Tick **Make this the price from now on** if the price has changed.
 
-### Linux server
+**Stock count** is for correcting the stock by hand. Enter the bags actually
+in the store and a reason. The difference goes into the log as a stock count.
+Use it to load the opening stock when you start.
 
+**Report** shows one month at a time: opening stock, bags received, bags and
+kg used, the cost of fertiliser used, stock counts, closing stock and its
+value. **Export Excel file** gives a workbook with three sheets:
+
+| Sheet | What is on it |
+|---|---|
+| Summary | One row per fertiliser with the figures above, plus totals |
+| All entries | Every delivery, usage and stock count in the month |
+| Usage log | Only the bags taken out: when, what, how many and who |
+
+Cancelled entries appear crossed out on the sheets but are left out of all
+totals. Usage is costed at the price in force when the bags were taken.
+Closing stock is valued at the price in force at the end of the month, so a
+price change later does not alter an earlier month.
+
+**Setup** has these sections:
+
+- **Fertilisers:** add or edit the name, kg per bag, cost per bag and
+  re-order level. Untick *In use* to hide one that is no longer bought; its
+  history is kept.
+- **Mixer lock:** set a manager PIN on the mixer's tablet. Once it is locked,
+  the tablet only shows Stock, Use bags and Log, and no costs. **Manager**
+  unlocks it. It locks itself again when the app is reopened, or after 15
+  minutes without use. The PIN only applies to that one device.
+- **Sharing:** enter the company code.
+
+## Several devices
+
+Tap the status chip in the top bar and enter the company code (the same code
+as Tikita). Every device with the code shares the same fertiliser list, stock
+and log. The chip shows where things stand: *This device only*, *Synced*,
+*3 waiting*, *Syncing…* or *Not synced*.
+
+Entries are saved on the device first and sent the moment there is a
+connection. Other devices' entries come down at the same time, and a device
+left open on the stock screen checks every minute.
+
+Until a device is connected, its records exist only on that device. Use
+**Report → Backup → Save backup** to keep a copy.
+
+## Hosting it
+
+Like Tikita, the app is plain HTML, CSS and JavaScript with no build step.
+Publish the files as they are, over `https://`, on any static host.
+Installing to the home screen and working offline both need `https://`.
+
+Once it is published, open the address on the tablet once with signal, then
+**Add to Home screen** (Chrome: ⋮ menu; iPad: Share button). On the PC, open
+it in Edge and use **… → Apps → Install this site as an app**.
+
+To try it locally:
+
+```sh
+python3 -m http.server 8000     # then open http://localhost:8000
 ```
-python3 -m venv venv && venv/bin/pip install -r requirements.txt
-FERT_ADMIN_PIN=1234 venv/bin/python run_server.py 8080
+
+## How it is put together
+
+| File | What it does |
+|---|---|
+| `index.html` | The page shell; each screen is drawn by `app.js` |
+| `app.js` | State, storage, screens, the monthly figures and the Excel layout |
+| `xlsx.js` | A small `.xlsx` writer (no library), extended from Tikita's to write several sheets |
+| `sync.js` | Talks to the shared database and queues changes made offline |
+| `sw.js` | Service worker that caches the app for offline use |
+| `manifest.webmanifest` | Makes it installable |
+| `supabase/fertiliser.sql` | The database tables and functions |
+
+Data is kept in `localStorage` under `fertiliser.v1`:
+
+```js
+{
+  products: [{ id, name, kg, cost, reorder, active }],
+  moves:    [{ id, pid, kind, bags, kg, cost, by, note, at, voidAt, voidBy, voidReason }],
+  prices:   [{ id, pid, cost, at, by }],
+  sync, pending
+}
 ```
 
-## Access over the internet
+- `kind` is `delivery`, `usage` or `adjustment`.
+- `bags` is the signed change in stock (+ in, − out).
+- `kg` and `cost` are copied onto each entry when it is made.
 
-The simplest and safest option is **Tailscale** (free for small use):
+Stock is never stored as a number. It is the sum of every entry that has not
+been cancelled. The name and PIN set on a device are kept separately under
+`fertiliser.device`; they are never synced and never included in a backup.
 
-1. Install Tailscale on the tower server and on each tablet, phone or laptop
-   that needs access, and sign in with the same account.
-2. Open `http://<server's Tailscale name or IP>:8080` from anywhere.
+### The shared database
 
-You don't need to change the router, and the app is never exposed to the
-public internet.
+It lives in the same Supabase project as Tikita and reuses Tikita's
+`workspaces` table, so one company code opens both apps. Tikita's own tables
+and functions are untouched. As with Tikita, the tables cannot be reached
+through the API. All access goes through three functions that check the code
+first:
 
-If you port-forward the router to the server instead, put it behind HTTPS
-(for example a reverse proxy such as Caddy) and set a manager PIN. Staff
-pages (stock, usage, log) have no password, so a public address without
-extra protection is not recommended.
+| Function | Does |
+|---|---|
+| `fert_join(code)` | Confirms a code and returns the company name |
+| `fert_pull(code, since)` | Everything changed since that moment |
+| `fert_push(code, payload)` | Saves this device's changes, stamped by the server |
 
-## Running on just one tablet
-
-The app needs a computer to run on. If the server isn't available yet, run
-it on any Windows PC or laptop on the same Wi-Fi as the tablet, following the
-same steps. Move it to the server later by copying the whole folder,
-including `data\`.
-
-## Development
-
-```
-pip install -r requirements.txt pytest
-python -m pytest
-```
+Once saved, an entry's figures never change. The server only ever adds a
+cancellation to an entry, and never removes one.

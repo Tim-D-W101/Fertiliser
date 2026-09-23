@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fertiliser Stock</title>
+<meta name="description" content="Fertiliser stock: deliveries, bags used by the mixer, stock on hand and monthly Excel reports.">
+<meta name="theme-color" content="#2f6b3a" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1611" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fertiliser">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+
+<header class="appbar">
+  <div class="appbar-inner">
+    <h1 class="brand">Fertiliser Stock</h1>
+    <div class="bar-actions">
+      <button type="button" class="icon-btn" id="lockBtn" hidden>Lock</button>
+      <button type="button" class="icon-btn" id="installBtn" hidden aria-label="Install app">Install</button>
+      <button type="button" class="sync-chip" id="syncChip" aria-label="Sync status">
+        <span class="dot" id="syncDot"></span>
+        <span id="syncChipText">This device only</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="view" id="view-stock" aria-label="Stock on hand"></section>
+  <section class="view" id="view-use" hidden aria-label="Record bags used"></section>
+  <section class="view" id="view-delivery" hidden aria-label="Book in a delivery"></section>
+  <section class="view" id="view-count" hidden aria-label="Stock count"></section>
+  <section class="view" id="view-log" hidden aria-label="Stock log"></section>
+  <section class="view" id="view-report" hidden aria-label="Monthly report"></section>
+  <section class="view" id="view-setup" hidden aria-label="Setup"></section>
+  <section class="view" id="view-sync" hidden aria-label="Share with other devices"></section>
+  <section class="view" id="view-unlock" hidden aria-label="Manager PIN"></section>
+</main>
+
+<nav class="tabbar" id="tabbar" role="tablist" aria-label="Sections"></nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden>
+  <span id="toastText"></span>
+  <button type="button" id="toastAction" hidden></button>
+</div>
+
+<script src="./xlsx.js"></script>
+<script src="./sync.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

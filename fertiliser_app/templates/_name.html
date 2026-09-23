@@ -1,4 +1,0 @@
-<label>Your name
-  <input name="recorded_by" required autocomplete="off" list="names" value="{{ form.get('recorded_by', '') }}">
-</label>
-<datalist id="names">{% for n in names or [] %}<option value="{{ n }}">{% endfor %}</datalist>
