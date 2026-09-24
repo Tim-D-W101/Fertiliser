@@ -297,6 +297,14 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .report tfoot th, .report tfoot td { font-weight: 700; border-bottom: 0; background: var(--accent-soft); }
 .hint { margin: 10px 0 20px; font-size: 13px; color: var(--text-dim); text-align: center; }
 
+.section-title { margin: 22px 0 10px; font-size: 15px; font-weight: 700; }
+.report tr.group th { background: var(--surface-2); text-align: right; }
+.report tr.group th:first-child { text-align: left; }
+.report td.indent { padding-left: 24px; }
+#view-report .table-wrap { margin-bottom: 14px; }
+.move-meta .centre { font-weight: 650; color: var(--text); }
+.pick.centres .pick-item { min-height: 58px; }
+
 /* ── setup ──────────────────────────────────────────────── */
 .plist { margin: 0 -14px -14px; border-top: 1px solid var(--line); }
 .pline { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
@@ -306,6 +314,11 @@ input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); ou
 .pline small { display: block; font-size: 13px; color: var(--text-dim); }
 .pline.inactive b { color: var(--text-dim); text-decoration: line-through; }
 .pedit { padding: 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.inline-add { display: flex; gap: 8px; margin-top: 14px; }
+.inline-add input {
+  flex: 1; min-width: 0; height: 46px; padding: 0 12px; font: inherit;
+  border-radius: 11px; border: 1px solid var(--line); background: var(--surface); color: var(--text);
+}
 .pin-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pin-form button { grid-column: 1 / -1; }
 

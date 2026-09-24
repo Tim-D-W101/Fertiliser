@@ -15,7 +15,11 @@
 
   var STORAGE_KEY = 'fertiliser.v1';
   var DEVICE_KEY = 'fertiliser.device';
-  var SCHEMA_VERSION = 1;
+  /*
+   * 2: cost centres. A device that synced on version 1 skipped the centres the
+   * server sent, so the first load on version 2 pulls everything again.
+   */
+  var SCHEMA_VERSION = 2;
   var CURRENCY = 'R';
 
   var KIND_LABEL = { delivery: 'Delivery', usage: 'Used', adjustment: 'Stock count' };
@@ -35,8 +39,9 @@
 
   var state = {
     products: [],   // {id, name, kg, cost, reorder, active}
-    moves: [],      // {id, pid, kind, bags (+in/-out), kg, cost, by, note, at, voidAt, voidBy, voidReason}
+    moves: [],      // {id, pid, kind, bags (+in/-out), kg, cost, by, note, centre, at, voidAt, voidBy, voidReason}
     prices: [],     // {id, pid, cost, at, by} — every price a fertiliser has had
+    centres: [],    // {id, name, active} — cost centres bags used are booked to
     sync: null,     // see sync.js
     pending: null   // changes this device still owes the others
   };
@@ -53,6 +58,8 @@
     logTo: dateKey(new Date()),
     logPid: '',
     logKind: '',
+    logCentre: '',
+    editCid: null,     // cost centre being renamed on Setup
     editPid: null,     // fertiliser being edited on Setup
     voidId: null,      // log entry whose cancel box is open
     draft: {}          // half-filled forms, so a re-render never loses typing
@@ -66,7 +73,9 @@
         state.products = Array.isArray(parsed.products) ? parsed.products : [];
         state.moves = Array.isArray(parsed.moves) ? parsed.moves : [];
         state.prices = Array.isArray(parsed.prices) ? parsed.prices : [];
+        state.centres = Array.isArray(parsed.centres) ? parsed.centres : [];
         if (parsed.sync) state.sync = parsed.sync;
+        if (state.sync && (parsed.version || 1) < 2) state.sync.lastNow = null;
         if (parsed.pending) state.pending = parsed.pending;
       }
       var dev = localStorage.getItem(DEVICE_KEY);
@@ -91,6 +100,7 @@
         products: state.products,
         moves: state.moves,
         prices: state.prices,
+        centres: state.centres,
         sync: state.sync,
         pending: state.pending
       }));
@@ -198,6 +208,23 @@
     return p ? p.name : '(removed fertiliser)';
   }
 
+  function centreById(id) {
+    for (var i = 0; i < state.centres.length; i++) if (state.centres[i].id === id) return state.centres[i];
+    return null;
+  }
+
+  var NO_CENTRE = '(no cost centre)';
+
+  function centreName(id) {
+    if (!id) return NO_CENTRE;
+    var c = centreById(id);
+    return c ? c.name : '(removed cost centre)';
+  }
+
+  function activeCentres() {
+    return state.centres.filter(function (c) { return c.active !== false; }).sort(byName);
+  }
+
   function byName(a, b) { return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }); }
 
   function activeProducts() {
@@ -274,14 +301,22 @@
     if (priceChanged) addPrice(p.id, p.cost, by);
   }
 
-  function recordMove(pid, kind, bags, by, note, cost) {
+  function recordMove(pid, kind, bags, by, note, cost, centre) {
     var p = productById(pid);
     var m = { id: uid(), pid: pid, kind: kind, bags: round2(bags), kg: p.kg,
               cost: cost === undefined ? p.cost : cost, by: by, note: note || '',
+              centre: centre || null,
               at: new Date().toISOString(), voidAt: null, voidBy: null, voidReason: null };
     state.moves.push(m);
     changed('moves', m.id);
     return m;
+  }
+
+  function addCentre(name) {
+    var c = { id: uid(), name: name, active: true };
+    state.centres.push(c);
+    changed('centres', c.id);
+    return c;
   }
 
   function voidMove(id, by, reason) {
@@ -377,6 +412,20 @@
       }).join('') + '</fieldset>';
   }
 
+  /* Big tiles for the cost centre the bags are going to. Hidden until centres exist. */
+  function centrePicker(form) {
+    var centres = activeCentres();
+    if (!centres.length) return '';
+    var chosen = dv(form, 'centre');
+    return '<fieldset class="pick centres"><legend>Cost centre — where is it going?</legend>' +
+      centres.map(function (c) {
+        return '<label class="pick-item">' +
+          '<input type="radio" name="centre" value="' + esc(c.id) + '" required' +
+          (chosen === c.id ? ' checked' : '') + '>' +
+          '<span><b>' + esc(c.name) + '</b></span></label>';
+      }).join('') + '</fieldset>';
+  }
+
   function nameField(form) {
     return '<label class="field"><span>Your name</span>' +
       '<input name="by" required maxlength="60" autocomplete="off" list="names" value="' +
@@ -449,7 +498,7 @@
       $('view-use').innerHTML = html + emptyState('No fertilisers yet', 'Ask the manager to set up the fertilisers.');
       return;
     }
-    html += '<form data-form="use" autocomplete="off">' + picker('use', products) +
+    html += '<form data-form="use" autocomplete="off">' + picker('use', products) + centrePicker('use') +
       '<div class="card">' +
       '<label class="field"><span>Bags used</span></label>' +
       '<div class="stepper big">' +
@@ -469,16 +518,19 @@
     var p = productById(data.pid);
     var bags = parseNum(data.bags);
     var by = (data.by || '').trim();
+    var centre = centreById(data.centre);
     if (!p) return toast('Tap the fertiliser you took.');
+    if (activeCentres().length && !centre) return toast('Tap the cost centre it is going to.');
     if (!(bags > 0)) return toast('Enter how many bags you used.');
     if (!by) return toast('Enter your name.');
 
     rememberName(by);
-    var m = recordMove(p.id, 'usage', -bags, by, (data.note || '').trim());
+    var m = recordMove(p.id, 'usage', -bags, by, (data.note || '').trim(), undefined, centre ? centre.id : null);
     ui.draft.use = {};
     var left = stockOf(p.id);
     render();
-    toast('Saved: ' + qty(bags) + ' ' + bagsWord(bags) + ' of ' + p.name + '. ' +
+    toast('Saved: ' + qty(bags) + ' ' + bagsWord(bags) + ' of ' + p.name +
+      (centre ? ' to ' + centre.name : '') + '. ' +
       qty(left) + ' left.' + (left < 0 ? ' Stock is below zero — tell the manager.' : ''),
       { label: 'Undo', fn: function () {
         if (voidMove(m.id, by, 'Undone straight after entry')) { render(); toast('Entry undone.'); }
@@ -602,7 +654,8 @@
       var t = new Date(m.at).getTime();
       return t >= from && t < to &&
         (!ui.logPid || m.pid === ui.logPid) &&
-        (!ui.logKind || m.kind === ui.logKind);
+        (!ui.logKind || m.kind === ui.logKind) &&
+        (!ui.logCentre || (m.kind === 'usage' && (m.centre || 'none') === ui.logCentre));
     }).sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
   }
 
@@ -628,6 +681,13 @@
         return '<option value="' + k + '"' + (ui.logKind === k ? ' selected' : '') + '>' + KIND_LABEL[k] + '</option>';
       }).join('') + '</select></label>' +
       '</div>' +
+      (state.centres.length ? '<label class="field"><span>Cost centre</span><select data-filter="logCentre">' +
+        '<option value="">All</option>' +
+        state.centres.slice().sort(byName).map(function (c) {
+          return '<option value="' + esc(c.id) + '"' + (ui.logCentre === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+        }).join('') +
+        '<option value="none"' + (ui.logCentre === 'none' ? ' selected' : '') + '>' + NO_CENTRE + '</option>' +
+        '</select></label>' : '') +
       '<button type="button" class="ghost-btn full" data-act="export-log">Export Excel file</button>' +
       '</div>';
 
@@ -643,7 +703,9 @@
           '<div class="move-main">' +
           '<div class="move-title">' + esc(productName(m.pid)) + '</div>' +
           '<div class="move-meta">' + esc(whenText(m.at)) + ' · <span class="kind">' + KIND_LABEL[m.kind] +
-          '</span> · ' + esc(m.by) + '</div>' +
+          '</span>' + (m.kind === 'usage' && (m.centre || state.centres.length)
+            ? ' → <span class="centre">' + esc(centreName(m.centre)) + '</span>' : '') +
+          ' · ' + esc(m.by) + '</div>' +
           (m.note ? '<div class="move-note">' + esc(m.note) + '</div>' : '') +
           (voided ? '<div class="void-note">Cancelled ' + esc(whenText(m.voidAt)) + ' by ' + esc(m.voidBy) +
             ': ' + esc(m.voidReason) + '</div>' : '') +
@@ -709,6 +771,34 @@
     }).filter(function (r) { return r.show; });
   }
 
+  /*
+   * Bags used in the month, split by cost centre and then by fertiliser.
+   * Usage recorded before cost centres existed shows as "(no cost centre)".
+   */
+  function centreSummary(key) {
+    var st = monthStart(key).getTime();
+    var et = monthStart(shiftMonth(key, 1)).getTime();
+    var groups = {};
+    state.moves.forEach(function (m) {
+      if (m.kind !== 'usage' || !live(m)) return;
+      var t = new Date(m.at).getTime();
+      if (t < st || t >= et) return;
+      var gid = m.centre || '';
+      var g = groups[gid] || (groups[gid] = { id: gid, name: centreName(m.centre), items: {}, bags: 0, kg: 0, cost: 0 });
+      var it = g.items[m.pid] || (g.items[m.pid] = { name: productName(m.pid), bags: 0, kg: 0, cost: 0 });
+      it.bags -= m.bags; it.kg -= m.bags * m.kg; it.cost -= m.bags * m.cost;
+      g.bags -= m.bags; g.kg -= m.bags * m.kg; g.cost -= m.bags * m.cost;
+    });
+    return Object.keys(groups).map(function (k) {
+      var g = groups[k];
+      g.items = Object.keys(g.items).map(function (pid) { return g.items[pid]; }).sort(byName);
+      return g;
+    }).sort(function (a, b) {
+      if (!a.id !== !b.id) return a.id ? -1 : 1;   // "(no cost centre)" goes last
+      return byName(a, b);
+    });
+  }
+
   // ── view: report ───────────────────────────────────────
 
   function renderReport() {
@@ -749,12 +839,27 @@
         qty(sum('usedKg')) + '</td><td>' + money(sum('usedCost')) + '</td><td></td><td></td><td>' +
         money(sum('closingValue')) + '</td></tr></tfoot></table></div>' +
         '<p class="hint">Bags, except where it says kg. Cancelled entries are left out.</p>';
+
+      var groups = centreSummary(ui.month);
+      if (groups.length) {
+        html += '<h3 class="section-title">Used by cost centre</h3>' +
+          '<div class="table-wrap"><table class="report">' +
+          '<thead><tr><th>Cost centre / fertiliser</th><th>Bags</th><th>Kg</th><th>Cost</th></tr></thead><tbody>' +
+          groups.map(function (g) {
+            return '<tr class="group"><th>' + esc(g.name) + '</th><th>' + qty(g.bags) + '</th><th>' + qty(g.kg) +
+              '</th><th>' + money(g.cost) + '</th></tr>' +
+              g.items.map(function (it) {
+                return '<tr><td class="indent">' + esc(it.name) + '</td><td>' + qty(it.bags) + '</td><td>' +
+                  qty(it.kg) + '</td><td>' + money(it.cost) + '</td></tr>';
+              }).join('');
+          }).join('') + '</tbody></table></div>';
+      }
     }
 
     html += '<button type="button" class="primary-btn wide" data-act="export-month">' +
       '<svg viewBox="0 0 24 24" aria-hidden="true" class="btn-icon"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>' +
       'Export Excel file</button>' +
-      '<p class="hint" id="exportHint">Three sheets: the summary, every entry in the month, and the usage log.</p>';
+      '<p class="hint" id="exportHint">Four sheets: the summary, fertiliser used by cost centre, every entry in the month, and the usage log.</p>';
 
     html += '<div class="card muted-card"><h3 class="card-title">Backup</h3>' +
       '<p class="card-note">' + (FertSync.status().connected
@@ -774,7 +879,7 @@
     var S = XlsxWriter.styles;
     var cur = ' (' + CURRENCY + ')';
     var rows = [[
-      'Date / time', 'Fertiliser', 'Type', 'Bags (+ in / − out)', 'Kg', 'Cost per bag' + cur,
+      'Date / time', 'Fertiliser', 'Type', 'Cost centre', 'Bags (+ in / − out)', 'Kg', 'Cost per bag' + cur,
       'Value' + cur, 'Recorded by', 'Note', 'Cancelled at', 'Cancelled by', 'Reason cancelled'
     ].map(function (h) { return { v: h, s: S.HEAD }; })];
     rows[0].height = 32;
@@ -784,6 +889,7 @@
       var t = v ? S.VOID : S.TEXT, q = v ? S.VOID_QTY : S.QTY, c = v ? S.VOID_MONEY : S.MONEY;
       rows.push([
         { v: stampText(m.at), s: t }, { v: productName(m.pid), s: t }, { v: KIND_LABEL[m.kind], s: t },
+        { v: m.kind === 'usage' ? centreName(m.centre) : '', s: t },
         { v: round2(m.bags), s: q }, { v: round2(m.bags * m.kg), s: q }, { v: m.cost, s: c },
         { v: round2(m.bags * m.cost), s: c }, { v: m.by, s: t }, { v: m.note, s: t },
         { v: stampText(m.voidAt), s: t }, { v: m.voidBy || '', s: t }, { v: m.voidReason || '', s: t }
@@ -792,9 +898,9 @@
     return {
       name: name,
       rows: rows,
-      cols: [17, 22, 13, 11, 9, 12, 12, 16, 32, 17, 14, 26].map(function (w) { return { width: w }; }),
+      cols: [17, 22, 13, 16, 11, 9, 12, 12, 16, 32, 17, 14, 26].map(function (w) { return { width: w }; }),
       freeze: { row: 1 },
-      filter: 'A1:L' + Math.max(2, rows.length)
+      filter: 'A1:M' + Math.max(2, rows.length)
     };
   }
 
@@ -853,9 +959,44 @@
         cols: [24, 9, 11, 11, 13, 10, 10, 15, 11, 11, 11, 12, 15].map(function (w) { return { width: w }; }),
         freeze: { row: 4, col: 1 }
       },
+      centreSheet(key),
       movementSheet('All entries', moves),
       movementSheet('Usage log', moves.filter(function (m) { return m.kind === 'usage'; }))
     ] });
+  }
+
+  function centreSheet(key) {
+    var S = XlsxWriter.styles;
+    var cur = ' (' + CURRENCY + ')';
+    var groups = centreSummary(key);
+    var rows = [
+      [{ v: 'Fertiliser used by cost centre — ' + monthLabel(key), s: S.TITLE }],
+      [{ v: 'Cancelled entries are left out.', s: S.SUBTITLE }],
+      [],
+      ['Cost centre', 'Fertiliser', 'Bags used', 'Kg used', 'Cost' + cur].map(function (h) { return { v: h, s: S.HEAD }; })
+    ];
+    var total = { bags: 0, kg: 0, cost: 0 };
+    groups.forEach(function (g) {
+      g.items.forEach(function (it) {
+        rows.push([{ v: g.name, s: S.TEXT }, { v: it.name, s: S.TEXT }, { v: round2(it.bags), s: S.QTY },
+                   { v: round2(it.kg), s: S.QTY }, { v: round2(it.cost), s: S.MONEY }]);
+      });
+      rows.push([{ v: g.name + ' total', s: S.TOTAL }, { v: '', s: S.TOTAL }, { v: round2(g.bags), s: S.TOTAL_QTY },
+                 { v: round2(g.kg), s: S.TOTAL_QTY }, { v: round2(g.cost), s: S.TOTAL_MONEY }]);
+      total.bags += g.bags; total.kg += g.kg; total.cost += g.cost;
+    });
+    if (groups.length > 1) {
+      rows.push([]);
+      rows.push([{ v: 'ALL COST CENTRES', s: S.TOTAL }, { v: '', s: S.TOTAL }, { v: round2(total.bags), s: S.TOTAL_QTY },
+                 { v: round2(total.kg), s: S.TOTAL_QTY }, { v: round2(total.cost), s: S.TOTAL_MONEY }]);
+    }
+    if (!groups.length) rows.push([{ v: 'No bags used this month.', s: S.TEXT }]);
+    return {
+      name: 'By cost centre',
+      rows: rows,
+      cols: [{ width: 24 }, { width: 24 }, { width: 11 }, { width: 11 }, { width: 14 }],
+      freeze: { row: 4 }
+    };
   }
 
   function exportMonth() {
@@ -916,7 +1057,8 @@
       savedAt: new Date().toISOString(),
       products: state.products,
       moves: state.moves,
-      prices: state.prices
+      prices: state.prices,
+      centres: state.centres
     }, null, 2);
     deliverFile(new Blob([payload], { type: 'application/json' }),
       'fertiliser-backup-' + dateKey(new Date()) + '.json');
@@ -937,9 +1079,11 @@
       state.products = data.products;
       state.moves = Array.isArray(data.moves) ? data.moves : [];
       state.prices = Array.isArray(data.prices) ? data.prices : [];
+      state.centres = Array.isArray(data.centres) ? data.centres : [];
       state.products.forEach(function (x) { FertSync.touch('products', x.id); });
       state.moves.forEach(function (x) { FertSync.touch('moves', x.id); });
       state.prices.forEach(function (x) { FertSync.touch('prices', x.id); });
+      state.centres.forEach(function (x) { FertSync.touch('centres', x.id); });
       save();
       FertSync.schedule();
       render();
@@ -1020,6 +1164,30 @@
       '<p class="card-note gap">To load what is already in the store, add the fertiliser and then do a ' +
       '<a href="#" data-act="go" data-view="count">stock count</a>.</p></form>';
 
+    var centres = state.centres.slice().sort(byName);
+    html += '<div class="card"><h3 class="card-title">Cost centres</h3>' +
+      '<p class="card-note">Where bags used are booked to. The mixer picks one every time bags are taken.</p>' +
+      '<div class="plist">' + centres.map(function (c) {
+        if (ui.editCid === c.id) {
+          return '<form class="pedit" data-form="centreEdit" autocomplete="off">' +
+            '<input type="hidden" name="id" value="' + esc(c.id) + '">' +
+            '<label class="field"><span>Name</span><input name="name" required maxlength="40" value="' +
+            esc(dv('centreEdit', 'name', c.name)) + '"></label>' +
+            '<label class="check"><input type="checkbox" name="active"' +
+            (dv('centreEdit', 'active', c.active !== false) ? ' checked' : '') +
+            '> In use (untick to hide it from the mixer — its history is kept)</label>' +
+            '<div class="btn-row"><button type="submit" class="primary-btn compact">Save</button>' +
+            '<button type="button" class="ghost-btn" data-act="centre-close">Cancel</button></div></form>';
+        }
+        return '<div class="pline' + (c.active === false ? ' inactive' : '') + '"><div><b>' + esc(c.name) + '</b>' +
+          (c.active === false ? '<small>not in use</small>' : '') + '</div>' +
+          '<button type="button" class="mini-btn" data-act="centre-open" data-id="' + esc(c.id) + '">Edit</button></div>';
+      }).join('') + '</div>' +
+      '<form data-form="centreAdd" autocomplete="off" class="inline-add">' +
+      '<input name="name" required maxlength="40" placeholder="New cost centre, e.g. Avocados" value="' +
+      esc(dv('centreAdd', 'name')) + '">' +
+      '<button type="submit" class="primary-btn compact">Add</button></form></div>';
+
     html += '<div class="card"><h3 class="card-title">Mixer lock</h3>';
     if (!device.pinHash) {
       html += '<p class="card-note">Set a manager PIN to lock this ' + DEVICE + ' to the mixer\'s screens: ' +
@@ -1069,6 +1237,36 @@
     ui.draft.edit = {};
     render();
     toast('Saved ' + f.name + '.');
+  }
+
+  function centreNameTaken(name, exceptId) {
+    var n = name.trim().toLowerCase();
+    return state.centres.some(function (c) { return c.id !== exceptId && c.name.trim().toLowerCase() === n; });
+  }
+
+  function submitCentreAdd(data) {
+    var name = (data.name || '').trim();
+    if (!name) return toast('Enter the cost centre name.');
+    if (centreNameTaken(name)) return toast('There is already a cost centre called ' + name + '.');
+    addCentre(name);
+    ui.draft.centreAdd = {};
+    render();
+    toast('Added ' + name + '.');
+  }
+
+  function submitCentreEdit(data) {
+    var c = centreById(data.id);
+    if (!c) return;
+    var name = (data.name || '').trim();
+    if (!name) return toast('Enter the cost centre name.');
+    if (centreNameTaken(name, c.id)) return toast('There is already a cost centre called ' + name + '.');
+    c.name = name;
+    c.active = !!data.active;
+    changed('centres', c.id);
+    ui.editCid = null;
+    ui.draft.centreEdit = {};
+    render();
+    toast('Saved ' + name + '.');
   }
 
   function submitPin(data) {
@@ -1262,7 +1460,7 @@
 
   var SUBMIT = {
     use: submitUse, delivery: submitDelivery, count: submitCount, void: submitVoid,
-    add: submitAdd, edit: submitEdit, pin: submitPin, unlock: submitUnlock, connect: submitConnect
+    add: submitAdd, edit: submitEdit, pin: submitPin, centreAdd: submitCentreAdd, centreEdit: submitCentreEdit, unlock: submitUnlock, connect: submitConnect
   };
 
   function wire() {
@@ -1283,6 +1481,8 @@
       else if (act === 'void-close') { ui.voidId = null; render(); }
       else if (act === 'edit-open') { ui.editPid = el.dataset.id; ui.draft.edit = {}; render(); }
       else if (act === 'edit-close') { ui.editPid = null; render(); }
+      else if (act === 'centre-open') { ui.editCid = el.dataset.id; ui.draft.centreEdit = {}; render(); }
+      else if (act === 'centre-close') { ui.editCid = null; render(); }
       else if (act === 'month') {
         var step = Number(el.dataset.step);
         ui.month = step ? shiftMonth(ui.month, step) : monthKey(new Date());

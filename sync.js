@@ -25,7 +25,7 @@
   var DEBOUNCE_MS = 2000;
   var POLL_MS = 60000;
 
-  var KINDS = ['products', 'moves', 'prices'];
+  var KINDS = ['products', 'centres', 'moves', 'prices'];
 
   var ctx = null;
   var running = false;
@@ -102,11 +102,17 @@
     var products = indexById(s.products);
     var moves = indexById(s.moves);
     var prices = indexById(s.prices);
+    var centres = indexById(s.centres);
     return {
       products: Object.keys(s.pending.products).map(function (id) {
         var p = s.products[products[id]];
         return p ? { id: id, name: p.name, kg: p.kg, cost: p.cost, reorder: p.reorder || 0,
                      active: p.active !== false, deleted: false }
+                 : { id: id, deleted: true };
+      }),
+      centres: Object.keys(s.pending.centres).map(function (id) {
+        var c = s.centres[centres[id]];
+        return c ? { id: id, name: c.name, active: c.active !== false, deleted: false }
                  : { id: id, deleted: true };
       }),
       moves: Object.keys(s.pending.moves).map(function (id) {
@@ -146,11 +152,31 @@
       }
     });
 
+    var centres = indexById(s.centres);
+    (data.centres || []).forEach(function (row) {
+      if (s.pending.centres[row.id]) return;
+      var i = centres[row.id];
+      if (row.deleted) {
+        if (i !== undefined) { s.centres.splice(i, 1); centres = indexById(s.centres); changed = true; }
+        return;
+      }
+      var next = { id: row.id, name: row.name, active: row.active !== false };
+      if (i === undefined) {
+        s.centres.push(next);
+        centres[row.id] = s.centres.length - 1;
+        changed = true;
+      } else if (JSON.stringify(s.centres[i]) !== JSON.stringify(next)) {
+        s.centres[i] = next;
+        changed = true;
+      }
+    });
+
     var moves = indexById(s.moves);
     (data.moves || []).forEach(function (row) {
       if (s.pending.moves[row.id]) return;
       var next = { id: row.id, pid: row.pid, kind: row.kind, bags: num(row.bags), kg: num(row.kg),
                    cost: num(row.cost), by: row.by || '', note: row.note || '',
+                   centre: row.centre || null,
                    at: new Date(row.at).toISOString(),
                    voidAt: row.voidAt ? new Date(row.voidAt).toISOString() : null,
                    voidBy: row.voidBy || null, voidReason: row.voidReason || null };
@@ -204,7 +230,7 @@
 
     var body = payload();
     var sent = snapshot(s.pending);
-    var hasWork = body.products.length || body.moves.length || body.prices.length;
+    var hasWork = body.products.length || body.centres.length || body.moves.length || body.prices.length;
 
     var push = hasWork
       ? rpc('fert_push', { p_code: s.sync.code, p_payload: body })
@@ -258,6 +284,7 @@
 
       // Whatever is already on this device should reach the others.
       s.products.forEach(function (x) { s.pending.products[x.id] = 1; });
+      (s.centres || []).forEach(function (x) { s.pending.centres[x.id] = 1; });
       s.moves.forEach(function (x) { s.pending.moves[x.id] = 1; });
       s.prices.forEach(function (x) { s.pending.prices[x.id] = 1; });
 

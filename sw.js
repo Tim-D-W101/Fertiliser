@@ -8,7 +8,7 @@
  *
  * Bump CACHE when the asset list below changes.
  */
-var CACHE = 'fertiliser-v1';
+var CACHE = 'fertiliser-v2';
 var NETWORK_TIMEOUT = 2500;
 
 var ASSETS = [

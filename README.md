@@ -18,14 +18,16 @@ between every device that has the company code.
 is down to its re-order level and red if it has gone below zero, which means
 it is time for a stock count. The manager also sees what the stock is worth.
 
-**Use bags** is the mixer's screen. Tap the fertiliser, set the number of
-bags with − / + (half and quarter bags can be typed), check the name and tap
-**Save**. The tablet remembers the name. After saving, an **Undo** button
+**Use bags** is the mixer's screen. Tap the fertiliser, tap the **cost
+centre** it is going to (Macs, Bananas, …), set the number of bags with − / +
+(half and quarter bags can be typed), check the name and tap **Save**. The
+cost centre must be chosen every time; it is not remembered from the last
+entry, so bags are not booked to the wrong crop by accident. The tablet remembers the name. After saving, an **Undo** button
 stays up for a few seconds in case of a wrong tap. Recording works without
 signal, and the entry keeps the time it was actually made.
 
 **Log** lists every entry with its date, time and who made it. You can filter
-it by dates, fertiliser and type (Delivery, Used, Stock count), and
+it by dates, fertiliser, type (Delivery, Used, Stock count) and cost centre, and
 **Export Excel file** downloads what is on screen.
 
 To fix a wrong entry, the manager taps **Cancel** on it and gives a reason.
@@ -42,13 +44,16 @@ Use it to load the opening stock when you start.
 
 **Report** shows one month at a time: opening stock, bags received, bags and
 kg used, the cost of fertiliser used, stock counts, closing stock and its
-value. **Export Excel file** gives a workbook with three sheets:
+value. Below that, **Used by cost centre** splits the bags, kg and cost used
+by cost centre and then by fertiliser. **Export Excel file** gives a workbook
+with four sheets:
 
 | Sheet | What is on it |
 |---|---|
 | Summary | One row per fertiliser with the figures above, plus totals |
+| By cost centre | Bags, kg and cost used per cost centre and fertiliser, with a subtotal per cost centre |
 | All entries | Every delivery, usage and stock count in the month |
-| Usage log | Only the bags taken out: when, what, how many and who |
+| Usage log | Only the bags taken out: when, what, where to, how many and who |
 
 Cancelled entries appear crossed out on the sheets but are left out of all
 totals. Usage is costed at the price in force when the bags were taken.
@@ -60,6 +65,9 @@ price change later does not alter an earlier month.
 - **Fertilisers:** add or edit the name, kg per bag, cost per bag and
   re-order level. Untick *In use* to hide one that is no longer bought; its
   history is kept.
+- **Cost centres:** where bags used are booked to. Starts with Macs and
+  Bananas. Add more, rename one, or untick *In use* to hide it from the mixer
+  (its history is kept). Changes reach every device.
 - **Mixer lock:** set a manager PIN on the mixer's tablet. Once it is locked,
   the tablet only shows Stock, Use bags and Log, and no costs. **Manager**
   unlocks it. It locks itself again when the app is reopened, or after 15
@@ -134,14 +142,17 @@ Data is kept in `localStorage` under `fertiliser.v1`:
 ```js
 {
   products: [{ id, name, kg, cost, reorder, active }],
-  moves:    [{ id, pid, kind, bags, kg, cost, by, note, at, voidAt, voidBy, voidReason }],
+  moves:    [{ id, pid, kind, bags, kg, cost, by, note, centre, at, voidAt, voidBy, voidReason }],
   prices:   [{ id, pid, cost, at, by }],
+  centres:  [{ id, name, active }],
   sync, pending
 }
 ```
 
 - `kind` is `delivery`, `usage` or `adjustment`.
 - `bags` is the signed change in stock (+ in, − out).
+- `centre` is the cost centre's id, on usage only. Usage recorded before
+  cost centres existed has none and shows as *(no cost centre)*.
 - `kg` and `cost` are copied onto each entry when it is made.
 
 Stock is never stored as a number. It is the sum of every entry that has not

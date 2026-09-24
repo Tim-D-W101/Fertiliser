@@ -11,6 +11,11 @@
 --
 -- The code itself is never stored here. To create one:
 --   insert into public.fert_workspaces (name, join_code) values ('Name', 'XXXX-XXXX-XXXX-XXXX');
+-- and give it the starting cost centres:
+--   insert into public.fert_centres (workspace_id, id, name)
+--   select id, 'cc-macs', 'Macs' from public.fert_workspaces where join_code = 'XXXX-XXXX-XXXX-XXXX'
+--   union all
+--   select id, 'cc-bananas', 'Bananas' from public.fert_workspaces where join_code = 'XXXX-XXXX-XXXX-XXXX';
 
 create table public.fert_workspaces (
   id         uuid        primary key default gen_random_uuid(),
@@ -32,7 +37,20 @@ create table public.fert_products (
   primary key (workspace_id, id)
 );
 
+-- Cost centres (e.g. Macs, Bananas) that bags used are booked to.
+-- Each new company starts with Macs and Bananas (ids cc-macs, cc-bananas).
+create table public.fert_centres (
+  workspace_id uuid        not null references public.fert_workspaces(id) on delete cascade,
+  id           text        not null,
+  name         text        not null default '',
+  active       boolean     not null default true,
+  deleted      boolean     not null default false,
+  updated_at   timestamptz not null default now(),
+  primary key (workspace_id, id)
+);
+
 -- Stock movements. Append-only: once written, only the void fields change.
+-- centre_id is set on usage only.
 create table public.fert_moves (
   workspace_id uuid        not null references public.fert_workspaces(id) on delete cascade,
   id           text        not null,
@@ -43,6 +61,7 @@ create table public.fert_moves (
   cost_per_bag numeric     not null,
   recorded_by  text        not null default '',
   note         text        not null default '',
+  centre_id    text,
   at           timestamptz not null,
   voided_at    timestamptz,
   voided_by    text,
@@ -65,11 +84,13 @@ create table public.fert_prices (
 );
 
 create index fert_products_changed on public.fert_products (workspace_id, updated_at);
+create index fert_centres_changed  on public.fert_centres  (workspace_id, updated_at);
 create index fert_moves_changed    on public.fert_moves    (workspace_id, updated_at);
 create index fert_prices_changed   on public.fert_prices   (workspace_id, updated_at);
 
 alter table public.fert_workspaces enable row level security;
 alter table public.fert_products enable row level security;
+alter table public.fert_centres  enable row level security;
 alter table public.fert_moves    enable row level security;
 alter table public.fert_prices   enable row level security;
 
@@ -121,11 +142,16 @@ begin
                'reorder', p.reorder, 'active', p.active, 'deleted', p.deleted))
         from public.fert_products p
        where p.workspace_id = v_id and p.updated_at > v_since), '[]'::jsonb),
+    'centres', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', c.id, 'name', c.name, 'active', c.active, 'deleted', c.deleted))
+        from public.fert_centres c
+       where c.workspace_id = v_id and c.updated_at > v_since), '[]'::jsonb),
     'moves', coalesce((
       select jsonb_agg(jsonb_build_object(
                'id', m.id, 'pid', m.product_id, 'kind', m.kind, 'bags', m.bags,
                'kg', m.kg_per_bag, 'cost', m.cost_per_bag, 'by', m.recorded_by,
-               'note', m.note, 'at', m.at, 'voidAt', m.voided_at,
+               'note', m.note, 'centre', m.centre_id, 'at', m.at, 'voidAt', m.voided_at,
                'voidBy', m.voided_by, 'voidReason', m.void_reason))
         from public.fert_moves m
        where m.workspace_id = v_id and m.updated_at > v_since), '[]'::jsonb),
@@ -168,17 +194,32 @@ begin
         deleted      = excluded.deleted,
         updated_at   = excluded.updated_at;
 
+  insert into public.fert_centres (workspace_id, id, name, active, deleted, updated_at)
+  select v_id, r->>'id',
+         coalesce(r->>'name', ''),
+         coalesce((r->>'active')::boolean, true),
+         coalesce((r->>'deleted')::boolean, false),
+         now()
+    from jsonb_array_elements(coalesce(p_payload->'centres', '[]'::jsonb)) r
+   where coalesce(r->>'id', '') <> ''
+  on conflict (workspace_id, id) do update
+    set name       = excluded.name,
+        active     = excluded.active,
+        deleted    = excluded.deleted,
+        updated_at = excluded.updated_at;
+
   -- A movement's figures never change after it is first written; only a
   -- cancellation is added, and a cancellation is never taken back.
   insert into public.fert_moves
          (workspace_id, id, product_id, kind, bags, kg_per_bag, cost_per_bag,
-          recorded_by, note, at, voided_at, voided_by, void_reason, updated_at)
+          recorded_by, note, centre_id, at, voided_at, voided_by, void_reason, updated_at)
   select v_id, r->>'id', r->>'pid', r->>'kind',
          (r->>'bags')::numeric,
          coalesce((r->>'kg')::numeric, 0),
          coalesce((r->>'cost')::numeric, 0),
          coalesce(r->>'by', ''),
          coalesce(r->>'note', ''),
+         nullif(r->>'centre', ''),
          coalesce((r->>'at')::timestamptz, now()),
          (r->>'voidAt')::timestamptz,
          r->>'voidBy',
@@ -206,7 +247,7 @@ begin
 end;
 $$;
 
-revoke all on public.fert_workspaces, public.fert_products, public.fert_moves, public.fert_prices from anon, authenticated;
+revoke all on public.fert_workspaces, public.fert_centres, public.fert_products, public.fert_moves, public.fert_prices from anon, authenticated;
 revoke execute on function public.fert_workspace_for_code(text) from public, anon, authenticated;
 grant execute on function public.fert_join(text) to anon, authenticated;
 grant execute on function public.fert_pull(text, timestamptz) to anon, authenticated;
